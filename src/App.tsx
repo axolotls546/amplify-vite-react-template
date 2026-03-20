@@ -1,24 +1,30 @@
 import { useEffect, useState } from "react";
 import type { Schema } from "../amplify/data/resource";
 import { generateClient } from "aws-amplify/data";
-// 1. Add this import for the Authenticator hook
-import { useAuthenticator } from '@aws-amplify/ui-react';
+import { Authenticator } from '@aws-amplify/ui-react';
+import '@aws-amplify/ui-react/styles.css';
 
-const client = generateClient<Schema>();
+// Initialize the client to use the User Pool for private data access
+const client = generateClient<Schema>({
+  authMode: 'userPool'
+});
 
-function App() {
-  // 2. Access the signOut function and user data
-  const { user, signOut } = useAuthenticator();
+export default function App() {
   const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
 
   useEffect(() => {
-    client.models.Todo.observeQuery().subscribe({
+    // Subscribe to data changes in real-time
+    const sub = client.models.Todo.observeQuery().subscribe({
       next: (data) => setTodos([...data.items]),
     });
+    return () => sub.unsubscribe();
   }, []);
 
   function createTodo() {
-    client.models.Todo.create({ content: window.prompt("Todo content") });
+    const content = window.prompt("Todo content");
+    if (content) {
+      client.models.Todo.create({ content });
+    }
   }
 
   function deleteTodo(id: string) {
@@ -26,27 +32,21 @@ function App() {
   }
 
   return (
-    <main>
-      {/* 3. Show the user's email/username at the top */}
-      <h1>{user?.signInDetails?.loginId}'s todos</h1>
-      
-      <button onClick={createTodo}>+ new</button>
-      <ul>
-        {todos.map((todo) => (
-          <li onClick={() => deleteTodo(todo.id)} key={todo.id}>
-            {todo.content}
-          </li>
-        ))}
-      </ul>
-      
-      {/* 4. Add the Sign Out button */}
-      <button onClick={signOut} style={{ marginTop: '20px' }}>Sign out</button>
-
-      <div>
-        🥳 App successfully hosted. Try creating a new todo.
-      </div>
-    </main>
+    <Authenticator>
+      {({ signOut, user }) => (
+        <main>
+          <h1>{user?.signInDetails?.loginId}'s Todos</h1>
+          <button onClick={createTodo}>+ New</button>
+          <ul>
+            {todos.map((todo) => (
+              <li key={todo.id} onClick={() => deleteTodo(todo.id)}>
+                {todo.content} <span>(Click to delete)</span>
+              </li>
+            ))}
+          </ul>
+          <button onClick={signOut}>Sign Out</button>
+        </main>
+      )}
+    </Authenticator>
   );
 }
-
-export default App;
